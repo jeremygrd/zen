@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>ZenScroll</title>
     
-    <link rel="manifest" href='data:application/json,{"name":"ZenScroll","short_name":"ZenScroll","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000"}'>
+    <link rel="manifest" href='data:application/json,{"name":"ZenScroll","short_name":"ZenScroll","start_url":"index.html","display":"standalone","background_color":"#000000","theme_color":"#000000","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/106/106061.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}'>
 
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: sans-serif; }
         canvas { display: block; cursor: ns-resize; touch-action: none; image-rendering: pixelated; }
         
         .controls {
             position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
             background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             padding: 20px; border-radius: 40px; display: flex; flex-direction: column; align-items: center; gap: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1); width: 220px;
+            border: 1px solid rgba(255, 255, 255, 0.1); width: 220px; z-index: 10;
         }
 
         label { color: white; font-size: 9px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; }
@@ -47,7 +48,6 @@ const speedRange = document.getElementById('speedRange');
 let w, h, imageData, data, offset = 0, manualVelocity = 0, autoSpeed = 0, isAudioStarted = false;
 
 function resize() {
-    // Grain épais (ratio 3) pour le contraste
     w = canvas.width = Math.ceil(window.innerWidth / 3);
     h = canvas.height = Math.ceil(window.innerHeight / 3);
     canvas.style.width = window.innerWidth + 'px';
@@ -63,7 +63,10 @@ function hash(x, y) {
 
 function draw() {
     autoSpeed = parseFloat(speedRange.value);
-    offset += (autoSpeed + manualVelocity);
+    
+    // INVERSION DU SENS : On soustrait au lieu d'ajouter
+    offset -= (autoSpeed + manualVelocity);
+    
     manualVelocity *= 0.94;
 
     if (isAudioStarted) {
@@ -83,6 +86,7 @@ function draw() {
     requestAnimationFrame(draw);
 }
 
+// --- AUDIO ---
 let audioCtx, noiseNode, filter;
 function startAudio() {
     if (isAudioStarted) return;
@@ -103,10 +107,10 @@ function startAudio() {
     isAudioStarted = true;
     document.querySelector('.hint').style.display = 'none';
     
-    // WakeLock pour garder l'écran allumé
     if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
 }
 
+// --- INPUTS ---
 window.addEventListener('touchstart', e => {
     startAudio();
     if(e.target.id !== 'speedRange') this.lastY = e.touches[0].clientY;
@@ -114,7 +118,8 @@ window.addEventListener('touchstart', e => {
 
 window.addEventListener('touchmove', e => {
     if(e.target.id === 'speedRange') return;
-    manualVelocity = (e.touches[0].clientY - this.lastY) * 1.1;
+    // INVERSION SENS TACTILE : On inverse la polarité du delta
+    manualVelocity = -(e.touches[0].clientY - this.lastY) * 1.1;
     this.lastY = e.touches[0].clientY;
     e.preventDefault();
 }, { passive: false });
