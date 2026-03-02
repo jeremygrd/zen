@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>ZenScroll</title>
+    
+    <link rel="manifest" href='data:application/json,{"name":"ZenScroll","short_name":"ZenScroll","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000"}'>
+
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        canvas { display: block; cursor: ns-resize; touch-action: none; image-rendering: pixelated; }
+        
+        .controls {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            padding: 20px; border-radius: 40px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1); width: 220px;
+        }
+
+        label { color: white; font-size: 9px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.5; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #fff; height: 30px; }
+
+        .hint { 
+            position: absolute; top: 60px; width: 100%; text-align: center;
+            color: rgba(255,255,255,0.2); font-size: 11px; letter-spacing: 3px; pointer-events: none; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+<div class="hint">Touchez pour le son</div>
+<canvas id="c"></canvas>
+
+<div class="controls">
+    <label>Vitesse Automatique</label>
+    <input type="range" id="speedRange" min="0" max="60" value="0">
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+const speedRange = document.getElementById('speedRange');
+
+let w, h, imageData, data, offset = 0, manualVelocity = 0, autoSpeed = 0, isAudioStarted = false;
+
+function resize() {
+    // Grain épais (ratio 3) pour le contraste
+    w = canvas.width = Math.ceil(window.innerWidth / 3);
+    h = canvas.height = Math.ceil(window.innerHeight / 3);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    imageData = ctx.createImageData(w, h);
+    data = imageData.data;
+}
+
+function hash(x, y) {
+    let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123;
+    return n - Math.floor(n);
+}
+
+function draw() {
+    autoSpeed = parseFloat(speedRange.value);
+    offset += (autoSpeed + manualVelocity);
+    manualVelocity *= 0.94;
+
+    if (isAudioStarted) {
+        let totalV = Math.abs(autoSpeed + manualVelocity);
+        filter.frequency.setTargetAtTime(180 + (totalV * 45), audioCtx.currentTime, 0.1);
+    }
+
+    for (let i = 0; i < data.length; i += 4) {
+        let x = (i / 4) % w;
+        let y = Math.floor((i / 4) / w);
+        let n = hash(x, Math.floor(y + offset));
+        let val = (n > 0.5) ? 255 : 0; 
+        data[i] = data[i+1] = data[i+2] = val;
+        data[i+3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    requestAnimationFrame(draw);
+}
+
+let audioCtx, noiseNode, filter;
+function startAudio() {
+    if (isAudioStarted) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+    const out = buffer.getChannelData(0);
+    for (let i = 0; i < buffer.length; i++) out[i] = (Math.random() * 2 - 1) * 0.12;
+    
+    noiseNode = audioCtx.createBufferSource();
+    noiseNode.buffer = buffer;
+    noiseNode.loop = true;
+    filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 200;
+    
+    noiseNode.connect(filter).connect(audioCtx.destination);
+    noiseNode.start();
+    isAudioStarted = true;
+    document.querySelector('.hint').style.display = 'none';
+    
+    // WakeLock pour garder l'écran allumé
+    if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+}
+
+window.addEventListener('touchstart', e => {
+    startAudio();
+    if(e.target.id !== 'speedRange') this.lastY = e.touches[0].clientY;
+}, {passive: false});
+
+window.addEventListener('touchmove', e => {
+    if(e.target.id === 'speedRange') return;
+    manualVelocity = (e.touches[0].clientY - this.lastY) * 1.1;
+    this.lastY = e.touches[0].clientY;
+    e.preventDefault();
+}, { passive: false });
+
+window.onresize = resize;
+resize();
+draw();
+</script>
+</body>
+</html>
